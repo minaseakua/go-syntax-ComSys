@@ -23,7 +23,7 @@ func (this *User) listenMessage() {
 		case <-this.isAlive:
 		case msg := <-this.C:
 			this.conn.Write([]byte(msg + "\n"))
-		case <-time.After(10 * time.Second):
+		case <-time.After(120 * time.Second):
 			this.logout()
 		}
 	}
@@ -74,12 +74,21 @@ func (this *User) getMessageFromNet() {
 		if msg == "who" {
 			this.serv.mapLock.Lock()
 			for _, user := range this.serv.OnlineMap {
-				onlineMsg := "[" + user.Name + "]" + "在线\n"
+				onlineMsg := "[" + user.Name + "]" + "在线"
 				this.sendMessage(onlineMsg, this)
 			}
 			this.serv.mapLock.Unlock()
 		} else if msg == "exit" {
 			this.logout()
+		} else if len(msg) > 4 && msg[:3] == "To:" {
+			name := strings.Split(msg, ":")[1]
+			desUser, ok := this.serv.OnlineMap[name]
+			if ok {
+				sendMsg := strings.Split(msg, ":")[2]
+				this.sendMessage(sendMsg, desUser)
+			} else {
+				this.sendMessage("用户名有误或对方已登出", this)
+			}
 		} else if len(msg) > 7 && msg[:7] == "rename:" {
 			newName := strings.Split(msg, ":")[1]
 			_, ok := this.serv.OnlineMap[newName]
