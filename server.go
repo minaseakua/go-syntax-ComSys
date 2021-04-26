@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"net"
 	"sync"
 )
@@ -53,6 +54,25 @@ func (this *Server) Handler(conn net.Conn) {
 	//BroadCast
 	msg := u.Name + "已上线"
 	this.BroadCast(u, msg)
+	go func() {
+		buf := make([]byte, 1024)
+		for {
+			n, err := conn.Read(buf)
+			if n == 0 {
+				msg := u.Name + "已下线"
+				this.BroadCast(u, msg)
+				return
+			}
+			if err != nil && err != io.EOF {
+				fmt.Println("User", u.Name, "Conn Read Error:", err)
+				return
+			}
+			//提取消息并广播
+			msg := string(buf[:n-1])
+			this.BroadCast(u, msg)
+		}
+	}()
+
 }
 
 func (this *Server) Start() {
