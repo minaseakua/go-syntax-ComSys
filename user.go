@@ -5,20 +5,27 @@ import (
 	"io"
 	"net"
 	"strings"
+	"time"
 )
 
 type User struct {
-	Name string
-	Addr net.Addr
-	C    chan string
-	conn net.Conn
-	serv *Server
+	Name    string
+	Addr    net.Addr
+	C       chan string
+	conn    net.Conn
+	serv    *Server
+	isAlive chan int
 }
 
 func (this *User) listenMessage() {
 	for {
-		msg := <-this.C
-		this.conn.Write([]byte(msg + "\n"))
+		select {
+		case <-this.isAlive:
+		case msg := <-this.C:
+			this.conn.Write([]byte(msg + "\n"))
+		case <-time.After(10 * time.Second):
+			this.logout()
+		}
 	}
 }
 
@@ -45,10 +52,16 @@ func (this *User) sendMessage(msg string, user *User) {
 	this.serv.SendMessage(msg, this, user)
 }
 
+func (this *User) logout() {
+	this.conn.Write([]byte("您已登出\n"))
+	this.conn.Close()
+}
+
 func (this *User) getMessageFromNet() {
 	buf := make([]byte, 1024)
 	for {
 		n, err := this.conn.Read(buf)
+		this.isAlive <- 1
 		if n == 0 {
 			this.offline()
 			return
@@ -65,6 +78,8 @@ func (this *User) getMessageFromNet() {
 				this.sendMessage(onlineMsg, this)
 			}
 			this.serv.mapLock.Unlock()
+		} else if msg == "exit" {
+			this.logout()
 		} else if len(msg) > 7 && msg[:7] == "rename:" {
 			newName := strings.Split(msg, ":")[1]
 			_, ok := this.serv.OnlineMap[newName]
@@ -86,11 +101,12 @@ func (this *User) getMessageFromNet() {
 
 func NewUser(conn net.Conn, serv *Server) *User {
 	u := &User{
-		Name: conn.RemoteAddr().String(),
-		Addr: conn.RemoteAddr(),
-		C:    make(chan string),
-		conn: conn,
-		serv: serv,
+		Name:    conn.RemoteAddr().String(),
+		Addr:    conn.RemoteAddr(),
+		C:       make(chan string),
+		conn:    conn,
+		serv:    serv,
+		isAlive: make(chan int, 1),
 	}
 	go u.getMessageFromNet()
 	go u.listenMessage()
