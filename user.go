@@ -40,7 +40,11 @@ func (this *User) offline() {
 	return
 }
 
-func (this *User) sendMessage() {
+func (this *User) sendMessage(msg string) {
+	this.serv.BroadCast(this, msg)
+}
+
+func (this *User) getMessageFromNet() {
 	buf := make([]byte, 1024)
 	for {
 		n, err := this.conn.Read(buf)
@@ -52,9 +56,17 @@ func (this *User) sendMessage() {
 			fmt.Println("User", this.Name, "Conn Read Error:", err)
 			return
 		}
-		//提取消息并广播
 		msg := string(buf[:n-1])
-		this.serv.BroadCast(this, msg)
+		if msg == "who" {
+			this.serv.mapLock.Lock()
+			for _, user := range this.serv.OnlineMap {
+				onlineMsg := "[" + user.Name + "]" + "在线\n"
+				this.C <- onlineMsg
+			}
+			this.serv.mapLock.Unlock()
+		} else {
+			this.sendMessage(msg)
+		}
 	}
 }
 
@@ -66,7 +78,7 @@ func NewUser(conn net.Conn, serv *Server) *User {
 		conn: conn,
 		serv: serv,
 	}
-	go u.sendMessage()
+	go u.getMessageFromNet()
 	go u.listenMessage()
 	u.online()
 
