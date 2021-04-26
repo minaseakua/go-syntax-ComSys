@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 )
 
 type User struct {
@@ -26,22 +27,22 @@ func (this *User) online() {
 	this.serv.OnlineMap[this.Name] = this
 	this.serv.mapLock.Unlock()
 	//BroadCast
-	msg := this.Name + "已上线"
-	this.serv.BroadCast(this, msg)
+	msg := "已上线"
+	this.sendMessage(msg, nil)
 }
 
 func (this *User) offline() {
 	//BroadCast
-	msg := this.Name + "已下线"
-	this.serv.BroadCast(this, msg)
+	msg := "已下线"
+	this.sendMessage(msg, nil)
 	this.serv.mapLock.Lock()
 	delete(this.serv.OnlineMap, this.Name)
 	this.serv.mapLock.Unlock()
 	return
 }
 
-func (this *User) sendMessage(msg string) {
-	this.serv.BroadCast(this, msg)
+func (this *User) sendMessage(msg string, user *User) {
+	this.serv.SendMessage(msg, this, user)
 }
 
 func (this *User) getMessageFromNet() {
@@ -61,11 +62,24 @@ func (this *User) getMessageFromNet() {
 			this.serv.mapLock.Lock()
 			for _, user := range this.serv.OnlineMap {
 				onlineMsg := "[" + user.Name + "]" + "在线\n"
-				this.C <- onlineMsg
+				this.sendMessage(onlineMsg, this)
 			}
 			this.serv.mapLock.Unlock()
+		} else if len(msg) > 7 && msg[:7] == "rename:" {
+			newName := strings.Split(msg, ":")[1]
+			_, ok := this.serv.OnlineMap[newName]
+			if ok {
+				this.sendMessage("用户名重复", this)
+			} else {
+				this.serv.mapLock.Lock()
+				this.serv.OnlineMap[newName] = this
+				delete(this.serv.OnlineMap, this.Name)
+				this.serv.mapLock.Unlock()
+				this.Name = newName
+				this.sendMessage("用户名更改成功", this)
+			}
 		} else {
-			this.sendMessage(msg)
+			this.sendMessage(msg, nil)
 		}
 	}
 }

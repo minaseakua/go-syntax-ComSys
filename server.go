@@ -24,13 +24,18 @@ func NewServer(ip string, port int) *Server {
 	return s
 }
 
-func (this *Server) BroadCast(u *User, msg string) {
-	sendMsg := "[" + u.Name + "]:" + msg + "\n"
-	this.mapLock.Lock()
-	for _, cli := range this.OnlineMap {
-		cli.C <- sendMsg
+func (this *Server) SendMessage(msg string, srcUser, desUser *User) {
+	sendMsg := "[" + srcUser.Addr.String() + "]" + srcUser.Name + ":" + msg
+	if desUser == nil {
+		this.mapLock.Lock()
+		for _, cli := range this.OnlineMap {
+			cli.C <- sendMsg
+		}
+		this.mapLock.Unlock()
+	} else {
+		desUser.C <- sendMsg
 	}
-	this.mapLock.Unlock()
+
 }
 
 func (this *Server) Start() {
